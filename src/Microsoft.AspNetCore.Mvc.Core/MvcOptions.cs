@@ -162,5 +162,10 @@ namespace Microsoft.AspNetCore.Mvc
         /// Gets or sets the default value for the Permanent property of <see cref="RequireHttpsAttribute"/>.
         /// </summary>
         public bool RequireHttpsPermanent { get; set; }
+
+        /// <summary>
+        /// Gets or sets the flag to allow binding undefined values to Enum types.
+        /// </summary>
+        public bool AllowBindingUndefinedValueToEnumType { get; set; } = true;
     }
 }
