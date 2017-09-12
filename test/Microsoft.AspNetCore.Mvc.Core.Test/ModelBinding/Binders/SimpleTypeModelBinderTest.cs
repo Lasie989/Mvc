@@ -350,6 +350,112 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding.Binders
             Assert.Null(error.Exception);
         }
 
+        [Fact]
+        public async Task BindModel_BindsEnumModels_IfArrayElementIsStringKey()
+        {
+            // Arrange
+            var bindingContext = GetBindingContext(typeof(IntEnum));
+            bindingContext.ValueProvider = new SimpleValueProvider
+            {
+                { "theModelName", new object[] { "Value1" } }
+            };
+
+            var binder = new SimpleTypeModelBinder(typeof(IntEnum));
+
+            // Act
+            await binder.BindModelAsync(bindingContext);
+
+            // Assert
+            Assert.True(bindingContext.Result.IsModelSet);
+            var boundModel = Assert.IsType<IntEnum>(bindingContext.Result.Model);
+            Assert.Equal(IntEnum.Value1, boundModel);
+        }
+
+        [Fact]
+        public async Task BindModel_BindsEnumModels_IfArrayElementIsStringValue()
+        {
+            // Arrange
+            var bindingContext = GetBindingContext(typeof(IntEnum));
+            bindingContext.ValueProvider = new SimpleValueProvider
+            {
+                { "theModelName", new object[] { "1" } }
+            };
+
+            var binder = new SimpleTypeModelBinder(typeof(IntEnum));
+
+            // Act
+            await binder.BindModelAsync(bindingContext);
+
+            // Assert
+            Assert.True(bindingContext.Result.IsModelSet);
+            var boundModel = Assert.IsType<IntEnum>(bindingContext.Result.Model);
+            Assert.Equal(IntEnum.Value1, boundModel);
+        }
+
+        public static TheoryData<string, int> EnumValues
+        {
+            get
+            {
+                return new TheoryData<string, int>
+                {
+                    { "0", 0 },
+                    { "1", 1 },
+                    { "13", 13 },
+                    { "Value1", 1 },
+                    { "Value1, Value2", 3 },
+                    // These two values look like big integers but are treated as two separate enum values that are
+                    // or'd together.
+                    { "32,015", 47 },
+                    { "32,128", 160 },
+                };
+            }
+        }
+
+        [Theory]
+        [MemberData(nameof(EnumValues))]
+        public async Task BindModel_BindsIntEnumModels(string flagsEnumValue, int expected)
+        {
+            // Arrange
+            var bindingContext = GetBindingContext(typeof(IntEnum));
+            bindingContext.ValueProvider = new SimpleValueProvider
+            {
+                { "theModelName", flagsEnumValue }
+            };
+
+            var binder = new SimpleTypeModelBinder(typeof(IntEnum));
+
+            // Act
+            await binder.BindModelAsync(bindingContext);
+
+            // Assert
+            Assert.True(bindingContext.Result.IsModelSet);
+            var boundModel = Assert.IsType<IntEnum>(bindingContext.Result.Model);
+            Assert.Equal((IntEnum)expected, boundModel);
+        }
+
+        [Theory]
+        [MemberData(nameof(EnumValues))]
+        [InlineData("Value8, Value4", 12)]
+        public async Task BindModel_BindsFlagsEnumModels(string flagsEnumValue, int expected)
+        {
+            // Arrange
+            var bindingContext = GetBindingContext(typeof(FlagsEnum));
+            bindingContext.ValueProvider = new SimpleValueProvider
+            {
+                { "theModelName", flagsEnumValue }
+            };
+
+            var binder = new SimpleTypeModelBinder(typeof(FlagsEnum));
+
+            // Act
+            await binder.BindModelAsync(bindingContext);
+
+            // Assert
+            Assert.True(bindingContext.Result.IsModelSet);
+            var boundModel = Assert.IsType<FlagsEnum>(bindingContext.Result.Model);
+            Assert.Equal((FlagsEnum)expected, boundModel);
+        }
+
         private static DefaultModelBindingContext GetBindingContext(Type modelType)
         {
             return new DefaultModelBindingContext
@@ -359,6 +465,27 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding.Binders
                 ModelState = new ModelStateDictionary(),
                 ValueProvider = new SimpleValueProvider() // empty
             };
+        }
+
+        private sealed class TestClass
+        {
+        }
+
+        [Flags]
+        private enum FlagsEnum
+        {
+            Value1 = 1,
+            Value2 = 2,
+            Value4 = 4,
+            Value8 = 8,
+        }
+
+        private enum IntEnum
+        {
+            Value0 = 0,
+            Value1 = 1,
+            Value2 = 2,
+            MaxValue = int.MaxValue
         }
     }
 }

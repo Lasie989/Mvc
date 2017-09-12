@@ -12,18 +12,21 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
     public class EnumTypeModelBinderTest
     {
         [Theory]
-        [InlineData(typeof(IntEnum?))]
-        [InlineData(typeof(FlagsEnum?))]
-        public async Task BindModel_SetsModel_ForNullableEnumTypes(Type modelType)
+        [InlineData(true, typeof(IntEnum?))]
+        [InlineData(true, typeof(FlagsEnum?))]
+        [InlineData(false, typeof(IntEnum?))]
+        [InlineData(false, typeof(FlagsEnum?))]
+        public async Task BindModel_SetsModel_ForEmptyValue_AndNullableEnumTypes(
+            bool allowBindingUndefinedValueToEnumType,
+            Type modelType)
         {
             // Arrange
-            var bindingContext = GetBindingContext(modelType);
-            bindingContext.ValueProvider = new SimpleValueProvider
-            {
-                { "theModelName", "" }
-            };
-
-            var binder = new EnumTypeModelBinder(new MvcOptions());
+            var binderInfo = GetBinderAndContext(
+                modelType,
+                allowBindingUndefinedValueToEnumType,
+                valueProviderValue: "");
+            var bindingContext = binderInfo.Item1;
+            var binder = binderInfo.Item2;
 
             // Act
             await binder.BindModelAsync(bindingContext);
@@ -34,19 +37,22 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
         }
 
         [Theory]
-        [InlineData(typeof(IntEnum))]
-        [InlineData(typeof(FlagsEnum))]
-        public async Task BindModel_AddsErrorToModelState_ForEmptyValue(Type modelType)
+        [InlineData(true, typeof(IntEnum))]
+        [InlineData(true, typeof(FlagsEnum))]
+        [InlineData(false, typeof(IntEnum))]
+        [InlineData(false, typeof(FlagsEnum))]
+        public async Task BindModel_AddsErrorToModelState_ForEmptyValue_AndNonNullableEnumTypes(
+            bool allowBindingUndefinedValueToEnumType,
+            Type modelType)
         {
             // Arrange
             var message = "The value '' is invalid.";
-            var bindingContext = GetBindingContext(modelType);
-            bindingContext.ValueProvider = new SimpleValueProvider
-            {
-                { "theModelName", "" }
-            };
-
-            var binder = new EnumTypeModelBinder(new MvcOptions());
+            var binderInfo = GetBinderAndContext(
+                modelType,
+                allowBindingUndefinedValueToEnumType,
+                valueProviderValue: "");
+            var bindingContext = binderInfo.Item1;
+            var binder = binderInfo.Item2;
 
             // Act
             await binder.BindModelAsync(bindingContext);
@@ -59,74 +65,31 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
             Assert.Equal(message, error.ErrorMessage);
         }
 
-        [Fact]
-        public async Task BindModel_BindsEnumModels_IfArrayElementIsStringKey()
-        {
-            // Arrange
-            var bindingContext = GetBindingContext(typeof(IntEnum));
-            bindingContext.ValueProvider = new SimpleValueProvider
-            {
-                { "theModelName", new object[] { "Value1" } }
-            };
-
-            var binder = new EnumTypeModelBinder(new MvcOptions());
-
-            // Act
-            await binder.BindModelAsync(bindingContext);
-
-            // Assert
-            Assert.True(bindingContext.Result.IsModelSet);
-            var boundModel = Assert.IsType<IntEnum>(bindingContext.Result.Model);
-            Assert.Equal(IntEnum.Value1, boundModel);
-        }
-
-        [Fact]
-        public async Task BindModel_BindsEnumModels_IfArrayElementIsStringValue()
-        {
-            // Arrange
-            var bindingContext = GetBindingContext(typeof(IntEnum));
-            bindingContext.ValueProvider = new SimpleValueProvider
-            {
-                { "theModelName", new object[] { "1" } }
-            };
-
-            var binder = new EnumTypeModelBinder(new MvcOptions());
-
-            // Act
-            await binder.BindModelAsync(bindingContext);
-
-            // Assert
-            Assert.True(bindingContext.Result.IsModelSet);
-            var boundModel = Assert.IsType<IntEnum>(bindingContext.Result.Model);
-            Assert.Equal(IntEnum.Value1, boundModel);
-        }
-
         [Theory]
-        [InlineData(true)]
-        [InlineData(false)]
-        public async Task BindModel_BindsIntEnumModels(bool allowBindingUndefinedValueToEnumType)
+        [InlineData(true, "Value1")]
+        [InlineData(true, "1")]
+        [InlineData(false, "Value1")]
+        [InlineData(false, "1")]
+        public async Task BindModel_BindsEnumModels_ForValuesInArray(
+            bool allowBindingUndefinedValueToEnumType,
+            string enumValue)
         {
             // Arrange
             var modelType = typeof(IntEnum);
-            var bindingContext = GetBindingContext(modelType);
-            bindingContext.ValueProvider = new SimpleValueProvider
-            {
-                { "theModelName", "2" }
-            };
-
-            var binder = new EnumTypeModelBinder(
-                new MvcOptions()
-                {
-                    AllowBindingUndefinedValueToEnumType = allowBindingUndefinedValueToEnumType
-                });
+            var binderInfo = GetBinderAndContext(
+                modelType,
+                allowBindingUndefinedValueToEnumType,
+                valueProviderValue: new object[] { enumValue });
+            var bindingContext = binderInfo.Item1;
+            var binder = binderInfo.Item2;
 
             // Act
             await binder.BindModelAsync(bindingContext);
 
             // Assert
             Assert.True(bindingContext.Result.IsModelSet);
-            Assert.IsType(modelType, bindingContext.Result.Model);
-            Assert.True(Enum.IsDefined(modelType, bindingContext.Result.Model));
+            var boundModel = Assert.IsType<IntEnum>(bindingContext.Result.Model);
+            Assert.Equal(IntEnum.Value1, boundModel);
         }
 
         [Theory]
@@ -138,23 +101,49 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
         [InlineData("8, 1", false)]
         [InlineData("Value2, Value8", false)]
         [InlineData("value8,value4,value2,value1", false)]
-        public async Task BindModel_BindsFlagsEnumModels(string flagsEnumValue, bool allowBindingUndefinedValueToEnumType)
+        public async Task BindModel_BindsTo_NonNullableEnumType(string flagsEnumValue, bool allowBindingUndefinedValueToEnumType)
         {
             // Arrange
             var modelType = typeof(FlagsEnum);
             var enumConverter = TypeDescriptor.GetConverter(modelType);
             var expected = enumConverter.ConvertFrom(flagsEnumValue).ToString();
-            var bindingContext = GetBindingContext(modelType);
-            bindingContext.ValueProvider = new SimpleValueProvider
-            {
-                { "theModelName", flagsEnumValue }
-            };
+            var binderInfo = GetBinderAndContext(
+                modelType,
+                allowBindingUndefinedValueToEnumType,
+                valueProviderValue: new object[] { flagsEnumValue });
+            var bindingContext = binderInfo.Item1;
+            var binder = binderInfo.Item2;
 
-            var binder = new EnumTypeModelBinder(
-                new MvcOptions()
-                {
-                    AllowBindingUndefinedValueToEnumType = allowBindingUndefinedValueToEnumType
-                });
+            // Act
+            await binder.BindModelAsync(bindingContext);
+
+            // Assert
+            Assert.True(bindingContext.Result.IsModelSet);
+            var boundModel = Assert.IsType<FlagsEnum>(bindingContext.Result.Model);
+            Assert.Equal(expected, boundModel.ToString());
+        }
+
+        [Theory]
+        [InlineData("1", true)]
+        [InlineData("8, 1", true)]
+        [InlineData("Value2, Value8", true)]
+        [InlineData("value8,value4,value2,value1", true)]
+        [InlineData("1", false)]
+        [InlineData("8, 1", false)]
+        [InlineData("Value2, Value8", false)]
+        [InlineData("value8,value4,value2,value1", false)]
+        public async Task BindModel_BindsTo_NullableEnumType(string flagsEnumValue, bool allowBindingUndefinedValueToEnumType)
+        {
+            // Arrange
+            var modelType = typeof(FlagsEnum?);
+            var enumConverter = TypeDescriptor.GetConverter(GetUnderlyingType(modelType));
+            var expected = enumConverter.ConvertFrom(flagsEnumValue).ToString();
+            var binderInfo = GetBinderAndContext(
+                modelType,
+                allowBindingUndefinedValueToEnumType,
+                valueProviderValue: new object[] { flagsEnumValue });
+            var bindingContext = binderInfo.Item1;
+            var binder = binderInfo.Item2;
 
             // Act
             await binder.BindModelAsync(bindingContext);
@@ -169,17 +158,20 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
         [InlineData(typeof(FlagsEnum), "Value10")]
         [InlineData(typeof(FlagsEnum), "Value1, Value10")]
         [InlineData(typeof(FlagsEnum), "value10, value1")]
+        [InlineData(typeof(FlagsEnum?), "Value10")]
+        [InlineData(typeof(FlagsEnum?), "Value1, Value10")]
+        [InlineData(typeof(FlagsEnum?), "value10, value1")]
         public async Task BindModel_AddsErrorToModelState_ForEnumValues_NotValid(Type modelType, string suppliedValue)
         {
             // Arrange
             var message = $"The value '{suppliedValue}' is not valid.";
-            var bindingContext = GetBindingContext(modelType);
-            bindingContext.ValueProvider = new SimpleValueProvider
-            {
-                { "theModelName", suppliedValue }
-            };
+            var binderInfo = GetBinderAndContext(
+                modelType,
+                allowBindingUndefinedValueToEnumType: true,
+                valueProviderValue: new object[] { suppliedValue });
+            var bindingContext = binderInfo.Item1;
+            var binder = binderInfo.Item2;
 
-            var binder = new EnumTypeModelBinder(new MvcOptions { AllowBindingUndefinedValueToEnumType = false });
 
             // Act
             await binder.BindModelAsync(bindingContext);
@@ -202,17 +194,24 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
         // or'd together.
         [InlineData(typeof(FlagsEnum), "32,015")]
         [InlineData(typeof(FlagsEnum), "32,128")]
+        [InlineData(typeof(IntEnum?), "3")]
+        [InlineData(typeof(FlagsEnum?), "19")]
+        [InlineData(typeof(FlagsEnum?), "0")]
+        [InlineData(typeof(FlagsEnum?), "1, 16")]
+        // These two values look like big integers but are treated as two separate enum values that are
+        // or'd together.
+        [InlineData(typeof(FlagsEnum?), "32,015")]
+        [InlineData(typeof(FlagsEnum?), "32,128")]
         public async Task BindModel_AddsErrorToModelState_ForEnumValues_Invalid(Type modelType, string suppliedValue)
         {
             // Arrange
             var message = $"The value '{suppliedValue}' is invalid.";
-            var bindingContext = GetBindingContext(modelType);
-            bindingContext.ValueProvider = new SimpleValueProvider
-            {
-                { "theModelName", suppliedValue }
-            };
-
-            var binder = new EnumTypeModelBinder(new MvcOptions { AllowBindingUndefinedValueToEnumType = false });
+            var binderInfo = GetBinderAndContext(
+                modelType,
+                allowBindingUndefinedValueToEnumType: false,
+                valueProviderValue: new object[] { suppliedValue });
+            var bindingContext = binderInfo.Item1;
+            var binder = binderInfo.Item2;
 
             // Act
             await binder.BindModelAsync(bindingContext);
@@ -234,35 +233,67 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding
         // or'd together.
         [InlineData(typeof(FlagsEnum), "32,015", 47)]
         [InlineData(typeof(FlagsEnum), "32,128", 160)]
-        public async Task BindModel_AllowsBindingUndefinedValues_ToEnumTypes(Type modelType, string suppliedValue, long expected)
+        [InlineData(typeof(IntEnum?), "3", 3)]
+        [InlineData(typeof(FlagsEnum?), "19", 19)]
+        [InlineData(typeof(FlagsEnum?), "0", 0)]
+        [InlineData(typeof(FlagsEnum?), "1, 16", 17)]
+        // These two values look like big integers but are treated as two separate enum values that are
+        // or'd together.
+        [InlineData(typeof(FlagsEnum?), "32,015", 47)]
+        [InlineData(typeof(FlagsEnum?), "32,128", 160)]
+        public async Task BindModel_AllowsBindingUndefinedValues_ToEnumTypes(
+            Type modelType,
+            string suppliedValue,
+            long expected)
         {
             // Arrange
-            var bindingContext = GetBindingContext(modelType);
-            bindingContext.ValueProvider = new SimpleValueProvider
-            {
-                { "theModelName", suppliedValue }
-            };
-
-            var binder = new EnumTypeModelBinder(new MvcOptions());
+            var binderProviderContext = new TestModelBinderProviderContext(modelType);
+            var binderInfo = GetBinderAndContext(
+                modelType,
+                allowBindingUndefinedValueToEnumType: true,
+                valueProviderValue: new object[] { suppliedValue });
+            var bindingContext = binderInfo.Item1;
+            var binder = binderInfo.Item2;
 
             // Act
             await binder.BindModelAsync(bindingContext);
 
             // Assert
             Assert.True(bindingContext.Result.IsModelSet);
-            Assert.IsType(modelType, bindingContext.Result.Model);
+            Assert.IsType(GetUnderlyingType(modelType), bindingContext.Result.Model);
             Assert.Equal(expected, Convert.ToInt64(bindingContext.Result.Model));
         }
 
-        private static DefaultModelBindingContext GetBindingContext(Type modelType)
+        private static (DefaultModelBindingContext, IModelBinder) GetBinderAndContext(
+            Type modelType,
+            bool allowBindingUndefinedValueToEnumType,
+            object valueProviderValue)
         {
-            return new DefaultModelBindingContext
+            var binderProviderContext = new TestModelBinderProviderContext(modelType);
+            var modelName = "theModelName";
+            var bindingContext = new DefaultModelBindingContext
             {
-                ModelMetadata = new EmptyModelMetadataProvider().GetMetadataForType(modelType),
-                ModelName = "theModelName",
+                ModelMetadata = binderProviderContext.Metadata,
+                ModelName = modelName,
                 ModelState = new ModelStateDictionary(),
-                ValueProvider = new SimpleValueProvider() // empty
+                ValueProvider = new SimpleValueProvider()
+                {
+                    { modelName, valueProviderValue }
+                }
             };
+            var binderProvider = new EnumTypeModelBinderProvider(allowBindingUndefinedValueToEnumType);
+            var binder = binderProvider.GetBinder(binderProviderContext);
+            return (bindingContext, binder);
+        }
+
+        private static Type GetUnderlyingType(Type modelType)
+        {
+            var underlyingType = Nullable.GetUnderlyingType(modelType);
+            if (underlyingType != null)
+            {
+                return underlyingType;
+            }
+            return modelType;
         }
 
         [Flags]

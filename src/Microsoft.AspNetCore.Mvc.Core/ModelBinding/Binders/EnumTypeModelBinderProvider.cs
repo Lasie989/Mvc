@@ -6,15 +6,15 @@ using System;
 namespace Microsoft.AspNetCore.Mvc.ModelBinding.Binders
 {
     /// <summary>
-    /// A <see cref="IModelBinderProvider"/> for types deriving from <see cref="System.Enum"/>.
+    /// A <see cref="IModelBinderProvider"/> for types deriving from <see cref="Enum"/>.
     /// </summary>
     public class EnumTypeModelBinderProvider : IModelBinderProvider
     {
-        private readonly MvcOptions _mvcOptions;
+        private readonly bool _allowBindingUndefinedValueToEnumType;
 
-        public EnumTypeModelBinderProvider(MvcOptions mvcOptions)
+        public EnumTypeModelBinderProvider(bool allowBindingUndefinedValueToEnumType)
         {
-            _mvcOptions = mvcOptions;
+            _allowBindingUndefinedValueToEnumType = allowBindingUndefinedValueToEnumType;
         }
 
         /// <inheritdoc />
@@ -25,9 +25,11 @@ namespace Microsoft.AspNetCore.Mvc.ModelBinding.Binders
                 throw new ArgumentNullException(nameof(context));
             }
 
-            if (context.Metadata.UnderlyingOrModelType.IsEnum)
+            if (context.Metadata.IsEnum)
             {
-                return new EnumTypeModelBinder(_mvcOptions);
+                return new EnumTypeModelBinder(
+                    _allowBindingUndefinedValueToEnumType,
+                    context.Metadata.UnderlyingOrModelType);
             }
 
             return null;
