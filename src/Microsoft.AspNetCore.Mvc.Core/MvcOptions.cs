@@ -165,7 +165,8 @@ namespace Microsoft.AspNetCore.Mvc
 
         /// <summary>
         /// Gets or sets the flag to allow binding undefined values to Enum types.
+        /// <see langword="false"/> by default.
         /// </summary>
-        public bool AllowBindingUndefinedValueToEnumType { get; set; } = true;
+        public bool AllowBindingUndefinedValueToEnumType { get; set; }
     }
 }
